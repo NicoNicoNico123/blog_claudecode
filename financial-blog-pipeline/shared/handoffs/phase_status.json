@@ -1,0 +1,58 @@
+{
+  "phase1_extraction": {
+    "status": "pending",
+    "last_run": null,
+    "output_files": [],
+    "input_source": "@yutinghaofinance/streams MCP subscriber",
+    "processing_count": 0,
+    "success_count": 0,
+    "error_count": 0,
+    "last_error": null
+  },
+  "phase2_indexing": {
+    "status": "pending",
+    "last_run": null,
+    "output_files": [],
+    "input_source": "phase1_extraction/outputs/extraction_results.json",
+    "processing_count": 0,
+    "success_count": 0,
+    "error_count": 0,
+    "last_error": null
+  },
+  "phase3_filtering": {
+    "status": "pending",
+    "last_run": null,
+    "output_files": [],
+    "input_source": "phase2_indexing/outputs/indexing_results.json",
+    "processing_count": 0,
+    "success_count": 0,
+    "error_count": 0,
+    "last_error": null
+  },
+  "phase4_generation": {
+    "status": "pending",
+    "last_run": null,
+    "output_files": [],
+    "input_source": "phase3_filtering/outputs/theme_clusters.json",
+    "processing_count": 0,
+    "success_count": 0,
+    "error_count": 0,
+    "last_error": null
+  },
+  "phase5_publishing": {
+    "status": "pending",
+    "last_run": null,
+    "output_files": [],
+    "input_source": "phase4_generation/outputs/blog_drafts/",
+    "processing_count": 0,
+    "success_count": 0,
+    "error_count": 0,
+    "last_error": null
+  },
+  "pipeline_status": "not_started",
+  "last_full_run": null,
+  "total_videos_processed": 0,
+  "total_posts_published": 0,
+  "created_at": "2024-08-05T00:00:00Z",
+  "updated_at": "2024-08-05T00:00:00Z"
+}

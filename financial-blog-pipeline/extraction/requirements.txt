@@ -1,0 +1,14 @@
+# YouTube Transcript Extraction - Minimal Requirements
+# Uses only youtube_transcript_api for transcript extraction
+
+# Core transcript extraction
+youtube-transcript-api==1.2.2
+
+# PostgreSQL storage
+psycopg2-binary==2.9.9
+
+# Environment configuration
+python-dotenv==1.0.0
+
+# YouTube Data API v3 for channel-based retrieval
+google-api-python-client==2.108.0
