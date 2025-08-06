@@ -21,8 +21,21 @@ load_dotenv()
 
 class FinancialBlogGenerator:
     def __init__(self):
-        self.openai_client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-        self.anthropic_client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
+        
+        if openai_api_key:
+            self.openai_client = openai.OpenAI(api_key=openai_api_key)
+        else:
+            self.openai_client = None
+            print("⚠️  OpenAI API key not found. Image generation will be limited.")
+        
+        if anthropic_api_key:
+            self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
+        else:
+            self.anthropic_client = None
+            print("⚠️  Anthropic API key not found. Some features will be limited.")
+        
         self.db_connection = self._get_database_connection()
         
     def _get_database_connection(self):
@@ -61,6 +74,10 @@ class FinancialBlogGenerator:
     
     def generate_traditional_chinese_blog(self, transcript: str, title: str) -> Dict:
         """Generate Traditional Chinese financial blog"""
+        if not self.anthropic_client:
+            print("❌ Anthropic API key not available. Cannot generate Traditional Chinese blog.")
+            return None
+            
         prompt = f"""
         你是一位專業的財經部落客，請根據以下影片逐字稿，撰寫一篇引人入勝的財經部落格文章。
         
@@ -106,6 +123,10 @@ class FinancialBlogGenerator:
     
     def generate_cantonese_blog(self, transcript: str, title: str) -> Dict:
         """Generate Cantonese financial blog with authentic tone"""
+        if not self.anthropic_client:
+            print("❌ Anthropic API key not available. Cannot generate Cantonese blog.")
+            return None
+            
         prompt = f"""
         你是一位地道嘅香港財經KOL，用廣東話同香港人講財經。
         
@@ -150,27 +171,28 @@ class FinancialBlogGenerator:
             return None
     
     def generate_images(self, content: str, title: str) -> List[str]:
-        """Generate relevant images for blog content"""
-        images = []
-        
-        # Search for stock-related keywords
-        keywords = [
-            "台積電", "台股", "美股", "港股", "恒生指數", "科技股",
-            "金融股", "房地產", "加密貨幣", "AI", "半導體"
-        ]
-        
-        # Generate stock chart image
-        stock_keywords = [k for k in keywords if k in content]
-        if stock_keywords:
-            images.append(self._generate_stock_chart(stock_keywords[0]))
-        
-        # Generate market sentiment image
-        images.append(self._generate_market_sentiment(content))
-        
-        return [img for img in images if img]
+        """Generate relevant images for blog content using specialized agents"""
+        try:
+            # Import the image orchestrator agent
+            from .image_agents import ImageOrchestratorAgent
+            
+            # Create orchestrator and generate images
+            orchestrator = ImageOrchestratorAgent()
+            images = orchestrator.generate_images(content, title)
+            
+            return images
+            
+        except Exception as e:
+            print(f"❌ Error in agent-based image generation: {e}")
+            # Fallback to original method
+            return self._fallback_image_generation(content, title)
     
     def _generate_stock_chart(self, keyword: str) -> str:
         """Generate stock chart image"""
+        if not self.openai_client:
+            print("❌ OpenAI API key not available. Cannot generate stock chart.")
+            return None
+            
         prompt = f"Professional stock chart showing {keyword} performance, clean financial design, green and red colors, Chinese labels"
         
         try:
@@ -188,6 +210,10 @@ class FinancialBlogGenerator:
     
     def _generate_market_sentiment(self, content: str) -> str:
         """Generate market sentiment visualization"""
+        if not self.openai_client:
+            print("❌ OpenAI API key not available. Cannot generate market sentiment visualization.")
+            return None
+            
         prompt = "Modern financial market sentiment visualization, bullish/bearish indicators, clean infographic style, Chinese financial theme"
         
         try:
@@ -208,6 +234,65 @@ class FinancialBlogGenerator:
         # This would integrate with stock image APIs
         # For now, placeholder for future implementation
         return []
+    
+    
+    def _search_web_image(self, keyword: str) -> str:
+        """Search for existing images on Unsplash"""
+        if not hasattr(self, '_unsplash_api_key'):
+            self._unsplash_api_key = os.getenv('UNSPLASH_API_KEY')
+            
+        if not self._unsplash_api_key:
+            print("❌ Unsplash API key not available. Cannot search for images.")
+            return None
+        
+        try:
+            # Search for images on Unsplash
+            url = "https://api.unsplash.com/search/photos"
+            headers = {"Authorization": f"Client-ID {self._unsplash_api_key}"}
+            params = {
+                "query": keyword,
+                "per_page": 1,
+                "orientation": "landscape"
+            }
+            
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            if data["results"]:
+                # Return the URL of the first image
+                return data["results"][0]["urls"]["regular"]
+            else:
+                print(f"🔍 No images found for keyword: {keyword}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Error searching for image on Unsplash: {e}")
+            return None
+    
+    def _fallback_image_generation(self, content: str, title: str) -> List[str]:
+        """Fallback to original image generation method"""
+        if not self.openai_client:
+            print("❌ OpenAI API key not available. Cannot generate fallback images.")
+            return []
+            
+        images = []
+        
+        # Search for stock-related keywords
+        keywords = [
+            "台積電", "台股", "美股", "港股", "恒生指數", "科技股",
+            "金融股", "房地產", "加密貨幣", "AI", "半導體"
+        ]
+        
+        # Generate stock chart image
+        stock_keywords = [k for k in keywords if k in content]
+        if stock_keywords:
+            images.append(self._generate_stock_chart(stock_keywords[0]))
+        
+        # Generate market sentiment image
+        images.append(self._generate_market_sentiment(content))
+        
+        return [img for img in images if img]
     
     def create_ghost_post(self, blog_data: Dict, images: List[str]) -> Dict:
         """Format blog post for Ghost CMS"""
@@ -252,8 +337,17 @@ class FinancialBlogGenerator:
                 video_data["title"]
             )
         
-        # Generate images
-        images = self.generate_images(video_data["transcript_text"], video_data["title"])
+        # Generate images based on the actual blog content (not just transcript)
+        images = []
+        if tc_blog:
+            # Use the Traditional Chinese blog content for image generation
+            images = self.generate_images(tc_blog["content"], tc_blog["title"])
+        elif cantonese_blog:
+            # Fallback to Cantonese blog if Traditional Chinese is not available
+            images = self.generate_images(cantonese_blog["content"], cantonese_blog["title"])
+        else:
+            # Fallback to using transcript if no blog content was generated
+            images = self.generate_images(video_data["transcript_text"], video_data["title"])
         
         # Create Ghost posts
         posts = []

@@ -45,9 +45,12 @@ python main.py --range 2024-08-01,2024-08-05
 - **Cantonese**: Authentic Hong Kong KOL tone with 地道廣東話
 
 ### 🖼️ AI Image Generation
-- **Stock Charts**: DALL-E 3 generated financial charts
-- **Market Sentiment**: Visual representations of market trends
-- **Content Alignment**: Images tailored to blog content themes
+- **Agent-Based Architecture**: Specialized agents for each image task
+- **Content Analysis**: LLM-powered context extraction from blog content
+- **Smart Prompting**: Agents generate optimal prompts for image creation
+- **Dual Approach**: Generate new images (DALL-E 3) or search existing ones (Unsplash)
+- **Parallel Processing**: Simultaneous image generation and search for performance
+- **Fallback Mechanisms**: Graceful degradation when APIs are unavailable
 
 ### 📊 Data Sources
 - PostgreSQL integration with Phase 1 data
@@ -153,6 +156,7 @@ phase2_generation/outputs/
 - `POSTGRES_PASSWORD`: Database password
 - `OPENAI_API_KEY`: For DALL-E 3 image generation
 - `ANTHROPIC_API_KEY`: For Claude blog generation
+- `UNSPLASH_API_KEY`: For web image search (optional, falls back to DALL-E only)
 
 ### Optional
 - `POSTGRES_USER`: Default 'root'
