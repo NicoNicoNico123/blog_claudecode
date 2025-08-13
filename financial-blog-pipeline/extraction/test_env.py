@@ -18,6 +18,7 @@ def test_env():
         'POSTGRES_PORT',
         'POSTGRES_DATABASE',
         'POSTGRES_PASSWORD',
+        'POSTGRES_USERNAME',
         'POSTGRES_USER'
     ]
     
@@ -34,7 +35,7 @@ def test_env():
         host = os.getenv('POSTGRES_HOST')
         port = os.getenv('POSTGRES_PORT')
         database = os.getenv('POSTGRES_DATABASE')
-        user = os.getenv('POSTGRES_USER', 'root')
+        user = os.getenv('POSTGRES_USERNAME', os.getenv('POSTGRES_USER', 'root'))
         password = os.getenv('POSTGRES_PASSWORD')
         
         conn_string = f"postgresql://{user}:{password}@{host}:{port}/{database}"

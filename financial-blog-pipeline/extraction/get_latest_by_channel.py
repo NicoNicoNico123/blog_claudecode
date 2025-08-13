@@ -6,7 +6,7 @@ Extract transcripts from the most recent videos in a channel
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from youtube_transcript_api import YouTubeTranscriptApi
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
@@ -20,7 +20,7 @@ def get_database_connection():
     host = os.getenv('POSTGRES_HOST')
     port = os.getenv('POSTGRES_PORT')
     database = os.getenv('POSTGRES_DATABASE')
-    user = os.getenv('POSTGRES_USER', 'root')
+    user = os.getenv('POSTGRES_USERNAME', os.getenv('POSTGRES_USER', 'root'))
     password = os.getenv('POSTGRES_PASSWORD')
     
     if not all([host, port, database, password]):
@@ -52,8 +52,8 @@ def get_channel_videos(channel_id, max_results=10, days_back=7):
         print("⚠️ YouTube API key not configured. Using mock data for demonstration.")
         return get_mock_channel_videos(channel_id, max_results, days_back)
     
-    # Calculate date range
-    published_after = (datetime.utcnow() - timedelta(days=days_back)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    # Calculate date range (timezone-aware UTC)
+    published_after = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime('%Y-%m-%dT%H:%M:%SZ')
     
     try:
         # Get videos from channel
@@ -74,6 +74,7 @@ def get_channel_videos(channel_id, max_results=10, days_back=7):
                 'video_id': item['id']['videoId'],
                 'title': item['snippet']['title'],
                 'channel_name': item['snippet']['channelTitle'],
+                'channel_id': item['snippet'].get('channelId', channel_id),
                 'publish_date': item['snippet']['publishedAt'],
                 'description': item['snippet']['description']
             }
@@ -94,6 +95,7 @@ def get_mock_channel_videos(channel_id, max_results=5, days_back=7):
             'video_id': 'p08_Rkh36bA',
             'title': '【財經分析】2024年投資策略大解析',
             'channel_name': '于庭皓',
+            'channel_id': channel_id,
             'publish_date': '2024-12-30T10:00:00Z',
             'description': '深入分析2024年的投資機會和風險'
         },
@@ -101,6 +103,7 @@ def get_mock_channel_videos(channel_id, max_results=5, days_back=7):
             'video_id': 'VIDEO_ID_2',
             'title': '科技股投資指南：AI浪潮下的機會',
             'channel_name': '于庭皓',
+            'channel_id': channel_id,
             'publish_date': '2024-12-28T09:30:00Z',
             'description': '探討AI技術發展對科技股的影響'
         },
@@ -108,6 +111,7 @@ def get_mock_channel_videos(channel_id, max_results=5, days_back=7):
             'video_id': 'VIDEO_ID_3',
             'title': '房地產市場最新趨勢分析',
             'channel_name': '于庭皓',
+            'channel_id': channel_id,
             'publish_date': '2024-12-25T14:00:00Z',
             'description': '2024年房地產投資策略'
         }
@@ -136,36 +140,99 @@ def extract_transcript(video_id):
         print(f"❌ Failed to extract transcript for {video_id}: {e}")
         return None
 
+def _get_blog_columns(cursor):
+    """Return set of column names for table 'blog' (lowercase)."""
+    cursor.execute(
+        """
+        SELECT lower(column_name)
+        FROM information_schema.columns 
+        WHERE table_name = 'blog' AND table_schema = current_schema()
+        """
+    )
+    return {name for (name,) in cursor.fetchall()}
+
+def _pick(colset, *candidates):
+    """Pick first candidate present in colset."""
+    for c in candidates:
+        if c in colset:
+            return c
+    return None
+
 def upload_transcript_to_postgresql(video_data, transcript_data):
-    """Upload transcript to PostgreSQL"""
+    """Upload transcript to PostgreSQL (blog table with flexible column names)."""
     try:
         conn = get_database_connection()
         cursor = conn.cursor()
-        
-        # Parse publish date
-        publish_dt = datetime.fromisoformat(video_data['publish_date'].replace('Z', '+00:00'))
-        
-        cursor.execute("""
-            INSERT INTO video_transcripts 
-            (video_id, title, channel_name, publish_date, transcript_text, duration_seconds)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (video_id) DO UPDATE SET
-                transcript_text = EXCLUDED.transcript_text,
-                updated_at = NOW()
-        """, (
-            video_data['video_id'],
-            video_data['title'],
-            video_data['channel_name'],
-            publish_dt,
-            transcript_data['transcript'],
-            transcript_data['duration']
-        ))
-        
+
+        cols = _get_blog_columns(cursor)
+
+        video_col = _pick(cols, 'video_id', 'videoid', 'videoId')
+        title_col = _pick(cols, 'title')
+        channel_id_col = _pick(cols, 'channelid', 'channel_id', 'channelId')
+        channel_name_col = _pick(cols, 'channel_name', 'channelname', 'channel')
+        publish_col = _pick(cols, 'publish_date', 'publishdate', 'published_at', 'publishedat', 'date')
+        transcript_col = _pick(cols, 'transcript_text', 'transcripttext', 'transcript')
+        duration_col = _pick(cols, 'duration_seconds', 'durationseconds', 'duration')
+
+        # Basic required columns
+        required = [video_col, title_col, transcript_col]
+        if any(c is None for c in required):
+            missing = [n for n, c in [('video', video_col), ('title', title_col), ('transcript', transcript_col)] if c is None]
+            print(f"❌ Blog table missing required columns: {', '.join(missing)}")
+            conn.close()
+            return False
+
+        # Build values
+        values_map = {
+            video_col: video_data['video_id'],
+            title_col: video_data['title'],
+            transcript_col: transcript_data['transcript'],
+        }
+        # Set both channel id and channel name columns if present
+        if channel_id_col:
+            values_map[channel_id_col] = (
+                video_data.get('channel_id')
+                or os.getenv('YOUTUBE_CHANNEL_ID')
+                or video_data.get('channel_name')
+                or 'unknown'
+            )
+        if channel_name_col and video_data.get('channel_name'):
+            values_map[channel_name_col] = video_data['channel_name']
+        if publish_col:
+            # Always provide a value for NOT NULL publish/date
+            iso_str = video_data.get('publish_date')
+            try:
+                values_map[publish_col] = (
+                    datetime.fromisoformat(iso_str.replace('Z', '+00:00')) if iso_str else datetime.now(timezone.utc)
+                )
+            except Exception:
+                values_map[publish_col] = datetime.now(timezone.utc)
+        if duration_col and transcript_data.get('duration') is not None:
+            values_map[duration_col] = transcript_data['duration']
+
+        # Try UPDATE first if we have a video id column, else direct INSERT
+        if video_col:
+            set_cols = [c for c in values_map.keys() if c != video_col]
+            if set_cols:
+                set_clause = ", ".join([f"{c} = %s" for c in set_cols])
+                update_sql = f"UPDATE blog SET {set_clause} WHERE {video_col} = %s"
+                update_params = [values_map[c] for c in set_cols] + [values_map[video_col]]
+                cursor.execute(update_sql, update_params)
+                if cursor.rowcount > 0:
+                    conn.commit()
+                    conn.close()
+                    return True
+
+        # INSERT path
+        insert_cols = list(values_map.keys())
+        placeholders = ", ".join(["%s"] * len(insert_cols))
+        insert_sql = f"INSERT INTO blog ({', '.join(insert_cols)}) VALUES ({placeholders})"
+        cursor.execute(insert_sql, [values_map[c] for c in insert_cols])
+
         conn.commit()
         conn.close()
-        
         return True
-        
+
     except Exception as e:
         print(f"❌ Failed to upload transcript: {e}")
         return False
@@ -200,10 +267,14 @@ def process_channel_videos(channel_id, max_videos=5, days_back=7):
         try:
             conn = get_database_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM video_transcripts WHERE video_id = %s", (video['video_id'],))
-            exists = cursor.fetchone()[0] > 0
+            cols = _get_blog_columns(cursor)
+            video_col = _pick(cols, 'video_id', 'videoid', 'videoId')
+            exists = False
+            if video_col:
+                cursor.execute(f"SELECT COUNT(*) FROM blog WHERE {video_col} = %s", (video['video_id'],))
+                exists = cursor.fetchone()[0] > 0
             conn.close()
-            
+
             if exists:
                 print("✅ Already exists, skipping")
                 continue
@@ -232,21 +303,34 @@ def list_videos_by_channel(channel_name=None, limit=10):
         conn = get_database_connection()
         cursor = conn.cursor()
         
-        if channel_name:
-            cursor.execute("""
-                SELECT video_id, title, channel_name, publish_date, duration_seconds, LENGTH(transcript_text)
-                FROM video_transcripts 
-                WHERE channel_name = %s
-                ORDER BY publish_date DESC
-                LIMIT %s
-            """, (channel_name, limit))
+        cols = _get_blog_columns(cursor)
+        video_col = _pick(cols, 'video_id', 'videoid', 'videoId') or 'NULL as video_id'
+        title_col = _pick(cols, 'title') or 'NULL as title'
+        channel_col = _pick(cols, 'channel_name', 'channelname', 'channel') or 'NULL as channel_name'
+        publish_col = _pick(cols, 'publish_date', 'publishdate', 'published_at', 'publishedat') or 'NOW() as publish_date'
+        duration_col = _pick(cols, 'duration_seconds', 'durationseconds', 'duration')
+        transcript_col = _pick(cols, 'transcript_text', 'transcripttext', 'transcript')
+
+        select_cols = [video_col, title_col, channel_col, publish_col]
+        if duration_col:
+            select_cols.append(duration_col)
         else:
-            cursor.execute("""
-                SELECT video_id, title, channel_name, publish_date, duration_seconds, LENGTH(transcript_text)
-                FROM video_transcripts 
-                ORDER BY publish_date DESC
-                LIMIT %s
-            """, (limit,))
+            select_cols.append('NULL as duration_seconds')
+        if transcript_col:
+            select_cols.append(f'LENGTH({transcript_col})')
+        else:
+            select_cols.append('0')
+
+        where_clause = ''
+        params = []
+        if channel_name and channel_col and ' as ' not in channel_col:
+            where_clause = f"WHERE {channel_col} = %s"
+            params.append(channel_name)
+
+        order_col = publish_col.split()[0] if ' as ' in publish_col else publish_col
+        sql = f"SELECT {', '.join(select_cols)} FROM blog {where_clause} ORDER BY {order_col} DESC LIMIT %s"
+        params.append(limit)
+        cursor.execute(sql, tuple(params))
         
         videos = cursor.fetchall()
         conn.close()

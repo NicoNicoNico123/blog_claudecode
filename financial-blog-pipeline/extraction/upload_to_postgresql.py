@@ -19,7 +19,7 @@ def get_database_connection():
     host = os.getenv('POSTGRES_HOST')
     port = os.getenv('POSTGRES_PORT')
     database = os.getenv('POSTGRES_DATABASE')
-    user = os.getenv('POSTGRES_USER', 'root')
+    user = os.getenv('POSTGRES_USERNAME', os.getenv('POSTGRES_USER', 'root'))
     password = os.getenv('POSTGRES_PASSWORD')
     
     if not all([host, port, database, password]):
@@ -28,34 +28,22 @@ def get_database_connection():
     conn_string = f"postgresql://{user}:{password}@{host}:{port}/{database}"
     return psycopg2.connect(conn_string)
 
-def create_table():
-    """Create the video_transcripts table if it doesn't exist"""
-    conn = get_database_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS video_transcripts (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            video_id VARCHAR(20) UNIQUE NOT NULL,
-            title TEXT NOT NULL,
-            channel_name TEXT NOT NULL,
-            publish_date TIMESTAMP WITH TIME ZONE,
-            transcript_text TEXT NOT NULL,
-            duration_seconds INTEGER,
-            language VARCHAR(10) DEFAULT 'zh-TW',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-    """)
-    
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_publish_date ON video_transcripts(publish_date);
-        CREATE INDEX IF NOT EXISTS idx_channel_name ON video_transcripts(channel_name);
-    """)
-    
-    conn.commit()
-    conn.close()
-    print("✅ Table created/verified")
+def ensure_target_table():
+    """Verify that target table 'blog' exists. Do not attempt to create/alter it."""
+    try:
+        conn = get_database_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'blog'")
+        exists = cursor.fetchone() is not None
+        conn.close()
+        if exists:
+            print("✅ Found existing table: blog")
+        else:
+            print("❌ Table 'blog' not found. Please create it before running this script.")
+            sys.exit(1)
+    except Exception as e:
+        print(f"❌ Failed to verify target table 'blog': {e}")
+        sys.exit(1)
 
 def get_video_metadata(video_id):
     """Get basic video metadata (simplified)"""
@@ -94,22 +82,54 @@ def extract_and_upload_transcript(video_url):
         # Upload to PostgreSQL
         conn = get_database_connection()
         cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT INTO video_transcripts 
-            (video_id, title, channel_name, publish_date, transcript_text, duration_seconds)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (video_id) DO UPDATE SET
-                transcript_text = EXCLUDED.transcript_text,
-                updated_at = NOW()
-        """, (
-            video_id,
-            metadata['title'],
-            metadata['channel_name'],
-            metadata['publish_date'],
-            full_text,
-            duration_seconds
-        ))
+
+        # Dynamic column mapping
+        cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'blog'")
+        cols = {name for (name,) in cursor.fetchall()}
+
+        def pick(*candidates):
+            for c in candidates:
+                if c in cols:
+                    return c
+            return None
+
+        video_col = pick('video_id', 'videoid', 'videoId')
+        title_col = pick('title')
+        channel_id_col = pick('channelid', 'channel_id', 'channelId')
+        channel_name_col = pick('channel_name', 'channelname', 'channel')
+        publish_col = pick('publish_date', 'publishdate', 'published_at', 'publishedat')
+        transcript_col = pick('transcript_text', 'transcripttext', 'transcript')
+        duration_col = pick('duration_seconds', 'durationseconds', 'duration')
+
+        values_map = {}
+        if video_col: values_map[video_col] = video_id
+        if title_col: values_map[title_col] = metadata['title']
+        if channel_id_col: values_map[channel_id_col] = os.getenv('YOUTUBE_CHANNEL_ID') or 'unknown'
+        if channel_name_col: values_map[channel_name_col] = metadata['channel_name']
+        if publish_col: values_map[publish_col] = metadata['publish_date']
+        if transcript_col: values_map[transcript_col] = full_text
+        if duration_col: values_map[duration_col] = duration_seconds
+
+        # Try UPDATE by video id first
+        if video_col and transcript_col:
+            set_cols = [c for c in values_map.keys() if c != video_col]
+            if set_cols:
+                set_clause = ", ".join([f"{c} = %s" for c in set_cols])
+                update_sql = f"UPDATE blog SET {set_clause} WHERE {video_col} = %s"
+                params = [values_map[c] for c in set_cols] + [values_map[video_col]]
+                cursor.execute(update_sql, params)
+                if cursor.rowcount == 0:
+                    # INSERT
+                    insert_cols = list(values_map.keys())
+                    placeholders = ", ".join(["%s"] * len(insert_cols))
+                    insert_sql = f"INSERT INTO blog ({', '.join(insert_cols)}) VALUES ({placeholders})"
+                    cursor.execute(insert_sql, [values_map[c] for c in insert_cols])
+        else:
+            # Fallback: direct INSERT with available columns
+            insert_cols = list(values_map.keys())
+            placeholders = ", ".join(["%s"] * len(insert_cols))
+            insert_sql = f"INSERT INTO blog ({', '.join(insert_cols)}) VALUES ({placeholders})"
+            cursor.execute(insert_sql, [values_map[c] for c in insert_cols])
         
         conn.commit()
         conn.close()
@@ -133,11 +153,23 @@ def list_uploaded_videos():
     conn = get_database_connection()
     cursor = conn.cursor()
     
-    cursor.execute("""
-        SELECT video_id, title, channel_name, created_at, LENGTH(transcript_text) 
-        FROM video_transcripts 
-        ORDER BY created_at DESC
-    """)
+    # Dynamic select
+    cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'blog'")
+    cols = {name for (name,) in cursor.fetchall()}
+    def pick(*candidates):
+        for c in candidates:
+            if c in cols:
+                return c
+        return None
+    video_col = pick('video_id', 'videoid', 'videoId') or 'NULL as video_id'
+    title_col = pick('title') or 'NULL as title'
+    channel_col = pick('channel_name', 'channelname', 'channel') or 'NULL as channel_name'
+    created_col = pick('created_at', 'createdat') or 'NOW() as created_at'
+    transcript_col = pick('transcript_text', 'transcripttext', 'transcript')
+    length_expr = f"LENGTH({transcript_col})" if transcript_col else '0'
+    order_col = created_col.split()[0] if ' as ' in created_col else created_col
+    sql = f"SELECT {video_col}, {title_col}, {channel_col}, {created_col}, {length_expr} FROM blog ORDER BY {order_col} DESC"
+    cursor.execute(sql)
     
     videos = cursor.fetchall()
     conn.close()
@@ -156,8 +188,17 @@ def get_transcript_by_video_id(video_id):
     conn = get_database_connection()
     cursor = conn.cursor()
     
+    cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'blog'")
+    cols = {name for (name,) in cursor.fetchall()}
+    def pick(*candidates):
+        for c in candidates:
+            if c in cols:
+                return c
+        return None
+    transcript_col = pick('transcript_text', 'transcripttext', 'transcript') or 'transcript_text'
+    video_col = pick('video_id', 'videoid', 'videoId') or 'video_id'
     cursor.execute(
-        "SELECT transcript_text FROM video_transcripts WHERE video_id = %s",
+        f"SELECT {transcript_col} FROM blog WHERE {video_col} = %s",
         (video_id,)
     )
     
@@ -183,8 +224,8 @@ def main():
         print("POSTGRES_USER=root (optional, defaults to root)")
         return
     
-    # Create table
-    create_table()
+    # Ensure target table exists
+    ensure_target_table()
     
     # Test with provided video
     video_url = "https://www.youtube.com/watch?v=p08_Rkh36bA"

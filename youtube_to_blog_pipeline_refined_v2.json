@@ -1,0 +1,394 @@
+{
+  "name": "YouTube to Blog Pipeline - Multi-Agent Workflow (Corrected)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "=======================================\n        YOUTUBE TO BLOG CONTENT PIPELINE\n=======================================\nTransforming Traditional Chinese Financial Education Videos → SEO Blog Posts\n\n🎯 Purpose: Automated extraction of 于庭皓's financial content + AI blog creation\n\n📊 Agents & Responsibilities:\n\n1. 🤝 CCO Agent (Master Orchestrator)\n   - Strategic oversight of whole pipeline\n   - Task delegation & quality control\n   - Model: GPT-4o\n\n2. 📝 Transcript Extractor Agent\n   - Video extraction via YouTube API\n   - Database storage management\n   - Model: GPT-4o-mini\n\n3. ✍️ Blog Generator Agent\n   - Traditional Chinese blog creation\n   - Content optimization for Taiwan market\n   - Model: Claude-3-5-sonnet\n\n4. 🎨 Image Context Analyzer\n   - Visual content generation\n   - Blog image enhancement\n   - Model: GPT-4o-mini\n\n💰 Cost Optimization:\n- GPT-4o only for strategic decisions\n- Mini models for execution tasks\n- Parallel processing pipeline\n\n🎯 Channel: UC0lbAQVpenvfA2QqzsRtL_g\n🗓️ Schedule: Daily at 9:00 AM\n=======================================",
+        "color": 3,
+        "width": 800,
+        "height": 800
+      },
+      "id": "header-note",
+      "name": "Pipeline Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-400, -600]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [{
+            "mode": "custom",
+            "cronExpression": "0 9 * * *"
+          }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "channelId",
+              "value": "UC0lbAQVpenvfA2QqzsRtL_g"
+            },
+            {
+              "name": "targetChannel",
+              "value": "于庭皓"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "setup-channel",
+      "name": "Set Channel & Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "cco-agent",
+      "name": "🤝 CCO Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [800, 0]
+    },
+    {
+      "parameters": {
+        "description": "You are the Chief Content Officer. Coordinate the YouTube to Blog pipeline by analyzing channel content and delegating to specialized agents for transcript extraction, blog generation, and visual enhancement."
+      },
+      "id": "cco-think",
+      "name": "🤔 Strategy Think",
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [1200, -400]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o"
+        },
+        "options": {}
+      },
+      "id": "cco-model",
+      "name": "🎯 CCO Model (GPT-4o)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [400, -300]
+    },
+    {
+      "parameters": {
+        "text": "{{ $fromAI('coordination_prompt', ``, 'string') }}",
+        "options": {},
+        "toolDescription": "Call this specialist agent to extract transcripts from YouTube videos and store them in PostgreSQL database"
+      },
+      "id": "transcript-agent",
+      "name": "📝 Transcript Extractor",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2,
+      "position": [1600, -600]
+    },
+    {
+      "parameters": {
+        "text": "{{ $fromAI('blog_prompt', ``, 'string') }}",
+        "options": {},
+        "toolDescription": "Call this specialist agent to generate Traditional Chinese financial blog posts from extracted transcripts"
+      },
+      "id": "blog-agent",
+      "name": "✍️ Blog Generator",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2,
+      "position": [1600, 0]
+    },
+    {
+      "parameters": {
+        "text": "{{ $fromAI('image_prompt', ``, 'string') }}",
+        "options": {},
+        "toolDescription": "Call this specialist agent to analyze blog content and generate contextual images for enhanced visual appeal"
+      },
+      "id": "image-agent",
+      "name": "🎨 Image Analyzer",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2,
+      "position": [1600, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM blog WHERE video_id = '{{$json.video_id}}'",
+        "options": {
+          "retryOnFail": true,
+          "onError": "continueRegularOutput"
+        }
+      },
+      "id": "check-exists",
+      "name": "🔍 Check Transcript Exists",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [2000, -800]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM blog WHERE created_at >= NOW() - INTERVAL '1 day' ORDER BY created_at DESC LIMIT 1",
+        "options": {
+          "retryOnFail": true,
+          "onError": "continueRegularOutput"
+        }
+      },
+      "id": "get-latest",
+      "name": "📋 Get Latest Transcript",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [2000, -400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "blog",
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": null
+        },
+        "options": {
+          "retryOnFail": true,
+          "onError": "continueRegularOutput"
+        }
+      },
+      "id": "store-transcript",
+      "name": "💾 Store Transcript",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [2000, -600]
+    },
+    {
+      "parameters": {
+        "resource": "channel",
+        "operation": "getAll",
+        "part": ["snippet"],
+        "fields": "snippet,contentDetails,status",
+        "filters": {
+          "id": "{{ $json.channelId }}"
+        },
+        "options": {
+          "onError": "continueRegularOutput"
+        }
+      },
+      "id": "get-channel",
+      "name": "🏢 Get Channel Info",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [2400, -700]
+    },
+    {
+      "parameters": {
+        "resource": "playlistItem",
+        "operation": "getAll",
+        "part": ["snippet"],
+        "fields": "snippet,contentDetails,status",
+        "playlistId": "UU0lbAQVpenvfA2QqzsRtL_g",
+        "limit": 1,
+        "options": {
+          "onError": "continueRegularOutput"
+        }
+      },
+      "id": "get-video",
+      "name": "📹 Get Latest Video",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [2400, -500]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "transcript-model",
+      "name": "🔍 Extract Model (GPT-4o-mini)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [1200, -600]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-3-5-sonnet"
+        },
+        "options": {}
+      },
+      "id": "blog-model",
+      "name": "📝 Blog Model (Claude-3.5)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1,
+      "position": [1200, 0]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "image-model",
+      "name": "🎨 Image Model (GPT-4o-mini)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [1200, 400]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "create",
+        "prompt": "{{ $json.imagePrompt }}",
+        "additionalFields": {
+          "n": 1,
+          "size": "1024x1024",
+          "responseFormat": "url"
+        },
+        "options": {
+          "retryOnFail": true,
+          "onError": "continueRegularOutput"
+        }
+      },
+      "id": "generate-image",
+      "name": "🖼️ Generate Images (DALL-E)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [2000, 600]
+    },
+    {
+      "parameters": {
+        "source": "adminApi",
+        "resource": "post",
+        "operation": "create",
+        "title": "{{ $json.title }}",
+        "html": "{{ $json.content }}",
+        "additionalFields": {
+          "status": "published",
+          "tags": ["financial-education", "traditional-chinese", "taiwan-market"]
+        },
+        "options": {
+          "onError": "continueRegularOutput"
+        }
+      },
+      "id": "publish-blog",
+      "name": "🚀 Publish to Ghost",
+      "type": "n8n-nodes-base.ghost",
+      "typeVersion": 1,
+      "position": [2400, 400]
+    },
+    {
+      "parameters": {
+        "content": "## TRANSCRIPT AGENT TOOLS\n\n**🔍 Video Analysis Tools:**\n- Get YouTube Channel Info\n- Get Latest Uploads\n- Check Existing Transcripts\n- Store New Transcripts\n\n**📊 Database Operations:**\n- PostgreSQL queries\n- Duplicate detection\n- Batch processing\n\n**❗ Agent Workflow:**\n1. Check if transcript already exists\n2. Extract new transcript if missing\n3. Store in PostgreSQL with metadata\n4. Return complete transcript data",
+        "color": 1,
+        "width": 400,
+        "height": 300
+      },
+      "id": "transcript-note",
+      "name": "Transcript Tools",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2400, -800]
+    },
+    {
+      "parameters": {
+        "content": "## BLOG GENERATION PIPELINE\n\n**✍️ Content Creation:**\n- Traditional Chinese financial blogs\n- SEO optimization\n- Taiwan market focus\n\n**📋 Structure:**\n1. Market impact analysis\n2. Beginner-friendly explanations\n3. Actionable insights\n4. Ghost CMS formatting\n\n**🎯 Output:**\n- Ready-to-publish blog posts\n- Structured for Taiwan readers\n- Financial education focused",
+        "color": 2,
+        "width": 400,
+        "height": 300
+      },
+      "id": "blog-note",
+      "name": "Blog Generation Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2000, -200]
+    },
+    {
+      "parameters": {
+        "content": "## VISUAL ENHANCEMENT\n\n**🎨 Image Generation:**\n- Context-aware image creation\n- Financial market visuals\n- Taiwan-specific imagery\n\n**🖼️ Technical Specs:**\n- 1024x1024 resolution\n- AI-powered contextual analysis\n- Optimized for blog placement\n\n**🔗 Integration:**\n- Automatic image insertion\n- Related to blog content\n- Professional financial visuals",
+        "color": 4,
+        "width": 400,
+        "height": 300
+      },
+      "id": "image-note",
+      "name": "Image Enhancement Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2400, 800]
+    },
+  "connections": {
+    "Daily Cron Trigger": {
+      "main": [[{"node": "Set Channel & Config", "type": "main", "index": 0}]]
+    },
+    "Set Channel & Config": {
+      "main": [[{"node": "🤝 CCO Agent", "type": "main", "index": 0}]]
+    },
+    "🤝 CCO Agent": {
+      "ai_languageModel": [[{"node": "🎯 CCO Model (GPT-4o)", "type": "ai_languageModel", "index": 0}]],
+      "ai_tool": [[{"node": "🤔 Strategy Think", "type": "ai_tool", "index": 0}]]
+    },
+    "🤔 Strategy Think": {
+      "ai_tool": [
+        [{"node": "📝 Transcript Extractor", "type": "ai_tool", "index": 0}],
+        [{"node": "✍️ Blog Generator", "type": "ai_tool", "index": 1}],
+        [{"node": "🎨 Image Analyzer", "type": "ai_tool", "index": 2}]
+      ]
+    },
+    "📝 Transcript Extractor": {
+      "ai_languageModel": [[{"node": "🔍 Extract Model (GPT-4o-mini)", "type": "ai_languageModel", "index": 0}]],
+      "ai_tool": [
+        [{"node": "🏢 Get Channel Info", "type": "ai_tool", "index": 0}],
+        [{"node": "📹 Get Latest Video", "type": "ai_tool", "index": 1}],
+        [{"node": "🔍 Check Transcript Exists", "type": "ai_tool", "index": 2}],
+        [{"node": "💾 Store Transcript", "type": "ai_tool", "index": 3}]
+      ]
+    },
+    "✍️ Blog Generator": {
+      "ai_languageModel": [[{"node": "📝 Blog Model (Claude-3.5)", "type": "ai_languageModel", "index": 0}]],
+      "ai_tool": [[{"node": "📋 Get Latest Transcript", "type": "ai_tool", "index": 0}]]
+    },
+    "🎨 Image Analyzer": {
+      "ai_languageModel": [[{"node": "🎨 Image Model (GPT-4o-mini)", "type": "ai_languageModel", "index": 0}]],
+      "ai_tool": [
+        [{"node": "🖼️ Generate Images (DALL-E)", "type": "ai_tool", "index": 0}],
+        [{"node": "🚀 Publish to Ghost", "type": "ai_tool", "index": 1}]
+      ]
+    },
+    "🔍 Extract Model (GPT-4o-mini)": {
+      "ai_languageModel": [[{"node": "📝 Transcript Extractor", "type": "ai_languageModel", "index": 0}]]
+    },
+    "📝 Blog Model (Claude-3.5)": {
+      "ai_languageModel": [[{"node": "✍️ Blog Generator", "type": "ai_languageModel", "index": 0}]]
+    },
+    "🎨 Image Model (GPT-4o-mini)": {
+      "ai_languageModel": [[{"node": "🎨 Image Analyzer", "type": "ai_languageModel", "index": 0}]]
+    },
+    "🎯 CCO Model (GPT-4o)": {
+      "ai_languageModel": [[{"node": "🤝 CCO Agent", "type": "ai_languageModel", "index": 0}]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

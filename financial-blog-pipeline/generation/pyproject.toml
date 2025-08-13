@@ -1,0 +1,37 @@
+[tool.poetry]
+name = "generation"
+version = "0.1.0"
+description = ""
+authors = ["Nico <zidnae852@gmail.com>"]
+readme = "README.md"
+packages = [
+    {include = "generation_pipeline", from = "src"}
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+python-dotenv = "*"
+pydantic = ">=2.7.4"
+click = "*"
+psycopg2-binary = "*"
+cloudinary = "*"
+openai = "*"
+requests = "*"
+tqdm = "*"
+tenacity = "*"
+beautifulsoup4 = "*"
+tiktoken = "*"
+langchain = "*"
+langchain-openai = "*"
+langgraph = "*"
+langchain-mcp-adapters = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}

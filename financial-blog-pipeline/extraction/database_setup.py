@@ -16,7 +16,7 @@ def get_database_connection():
     host = os.getenv('POSTGRES_HOST')
     port = os.getenv('POSTGRES_PORT')
     database = os.getenv('POSTGRES_DATABASE')
-    user = os.getenv('POSTGRES_USER', 'root')
+    user = os.getenv('POSTGRES_USERNAME', os.getenv('POSTGRES_USER', 'root'))
     password = os.getenv('POSTGRES_PASSWORD')
     
     if not all([host, port, database, password]):

@@ -18,7 +18,7 @@ def get_database_connection():
     host = os.getenv('POSTGRES_HOST')
     port = os.getenv('POSTGRES_PORT')
     database = os.getenv('POSTGRES_DATABASE')
-    user = os.getenv('POSTGRES_USER', 'root')
+    user = os.getenv('POSTGRES_USERNAME', os.getenv('POSTGRES_USER', 'root'))
     password = os.getenv('POSTGRES_PASSWORD')
     
     if not all([host, port, database, password]):
@@ -45,12 +45,11 @@ def extract_and_store_video(video_id, title, channel_name, publish_date=None):
         
         # Store in database
         cursor.execute("""
-            INSERT INTO video_transcripts 
+            INSERT INTO blog 
             (video_id, title, channel_name, publish_date, transcript_text, duration_seconds)
             VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (video_id) DO UPDATE SET
-                transcript_text = EXCLUDED.transcript_text,
-                updated_at = NOW()
+                transcript_text = EXCLUDED.transcript_text
         """, (
             video_id,
             title,
@@ -111,7 +110,7 @@ def list_latest_videos(limit=5):
         
         cursor.execute("""
             SELECT video_id, title, channel_name, publish_date, duration_seconds, LENGTH(transcript_text)
-            FROM video_transcripts 
+            FROM blog 
             WHERE channel_name = '于庭皓'
             ORDER BY publish_date DESC
             LIMIT %s

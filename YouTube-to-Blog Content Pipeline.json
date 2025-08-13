@@ -1,0 +1,528 @@
+{
+  "name": "YouTube-to-Blog Content Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "custom",
+              "cronExpression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "e5fe62bc-ad57-4c36-82c0-098c7dd8b65b",
+      "name": "Cron 09:00",
+      "type": "n8n-nodes-base.cron",
+      "position": [
+        -1136,
+        -96
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "0dc189c8-ae20-44b7-bb01-6ce998f43a77",
+      "name": "Orchestrator Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        -544,
+        -96
+      ],
+      "typeVersion": 1.9
+    },
+    {
+      "parameters": {
+        "toolDescription": "Find newest video. Call Tool:GetLatestVideo with {uploadsPlaylistId}. Return {video_id,title,url,publishedAt}.",
+        "text": "={{ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {}
+      },
+      "id": "929619d4-8311-48ba-aacc-091e6fb3e2d2",
+      "name": "Video Scout Agent",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "position": [
+        1024,
+        -48
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "toolDescription": "Given {video_id}, call Tool:GetTranscript. Return {transcript}.",
+        "text": "={{ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {}
+      },
+      "id": "c8532412-ed0c-4334-8390-d4777e274c08",
+      "name": "Transcript Agent",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "position": [
+        576,
+        432
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "toolDescription": "Upsert via Tool:UpsertTranscript({video_id,title,transcript,url}). Read via Tool:ReadLatestTranscript({video_id?}).",
+        "text": "={{ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {}
+      },
+      "id": "fc537669-c51e-41e0-b5ea-11733ac0fc78",
+      "name": "DB Agent",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "position": [
+        1520,
+        272
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "toolDescription": "If transcript missing, call Tool:ReadLatestTranscript(). Then call Tool:WriteBlog with {transcript}. Return {title,html,excerpt,imagePrompt}.",
+        "text": "={{ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {}
+      },
+      "id": "fadda648-c733-46d8-a6b9-91a7a0593f0d",
+      "name": "Writer Agent",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "position": [
+        944,
+        448
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "toolDescription": "Generate one image via Tool:GenerateImage({prompt}). Return {image_url}.",
+        "text": "={{ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {}
+      },
+      "id": "3eb474e6-3fd2-4304-ae11-80726dad82c9",
+      "name": "Image Agent",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "position": [
+        784,
+        848
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "toolDescription": "Publish to Ghost via Tool:PublishGhost({title,html,excerpt,feature_image,status}). Return {post_url,id}.",
+        "text": "={{ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {}
+      },
+      "id": "7626ed1b-8896-4bf4-9735-01dff573608d",
+      "name": "Publisher Agent",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "position": [
+        -416,
+        480
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "moonshotai/Kimi-K2-Instruct",
+          "mode": "list",
+          "cachedResultName": "moonshotai/Kimi-K2-Instruct"
+        },
+        "options": {}
+      },
+      "id": "0933dc9e-d137-4765-973a-1d8d47bf1d40",
+      "name": "OpenAI Chat Model Orchestrator",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -656,
+        96
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "K6wvJDsoe7iwbF1g",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "a20064ee-5fb1-4bd2-bfb6-2c0318fd4c52",
+      "name": "OpenAI Chat Model (Video)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        928,
+        224
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "2aee313c-3078-4db2-a941-d413b9fc52df",
+      "name": "OpenAI Chat Model (Transcript)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        560,
+        608
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "4e313696-d39f-4be3-a3e9-62c4e374e834",
+      "name": "OpenAI Chat Model (DB)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        1520,
+        480
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "0528e733-2f97-4f2a-b80f-20c2bab10951",
+      "name": "OpenAI Chat Model (Writer)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        944,
+        592
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "edaf4c36-c3a5-4e9e-b132-9b0f2ef5aab7",
+      "name": "OpenAI Chat Model (Image)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        784,
+        1008
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "740888d4-7b1f-4ec1-93c8-55136e46c82a",
+      "name": "OpenAI Chat Model (Publisher)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -448,
+        720
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {},
+      "id": "1f8e97b0-8b06-4cfd-a6d3-2c84731a69ce",
+      "name": "Tool:GetLatestVideo",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "position": [
+        16,
+        160
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.1,
+      "position": [
+        1184,
+        224
+      ],
+      "id": "be9e6d76-5844-4f19-8e32-37cbc717fd9b",
+      "name": "MCP Client"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        -96
+      ],
+      "id": "e4e73bb8-acd4-4593-9af5-aca864b120b8",
+      "name": "content agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.1,
+      "position": [
+        496,
+        -96
+      ],
+      "id": "5779aeb8-7a98-4d96-b1e9-687e7e83d8b5",
+      "name": "Ghost Blog agent"
+    },
+    {
+      "parameters": {
+        "endpointUrl": "https://server.smithery.ai/@jkawamoto/mcp-youtube-transcript/mcp?api_key=7fe7c654-28e4-4212-bc57-6885fda9d88d&profile=dry-megabyte-cMv4sB",
+        "serverTransport": "httpStreamable"
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.1,
+      "position": [
+        -320,
+        160
+      ],
+      "id": "46552913-e7bc-4af2-9018-63f386f334d6",
+      "name": "MCP Youtube"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -912,
+        0
+      ],
+      "id": "5c6bdfa2-8294-4821-8e74-8a922278d3c2",
+      "name": "When chat message received",
+      "webhookId": "4414796b-0220-4d0e-a1b3-d689f31c9c6f"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cron 09:00": {
+      "main": [
+        []
+      ]
+    },
+    "OpenAI Chat Model Orchestrator": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Orchestrator Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Scout Agent": {
+      "ai_tool": [
+        []
+      ]
+    },
+    "Transcript Agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "content agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB Agent": {
+      "ai_tool": [
+        []
+      ]
+    },
+    "Writer Agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "content agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image Agent": {
+      "ai_tool": [
+        []
+      ]
+    },
+    "Publisher Agent": {
+      "ai_tool": [
+        []
+      ]
+    },
+    "OpenAI Chat Model (Video)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Video Scout Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (Transcript)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Transcript Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (DB)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "DB Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (Writer)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Writer Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (Image)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Image Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (Publisher)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Publisher Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Client": {
+      "ai_tool": [
+        [
+          {
+            "node": "Video Scout Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orchestrator Agent": {
+      "main": [
+        []
+      ]
+    },
+    "content agent": {
+      "main": [
+        [
+          {
+            "node": "Ghost Blog agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Youtube": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Orchestrator Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "versionId": "433141b0-d111-40af-9e42-bde5ee3366c0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1cbe8240715080fa482d775860f0133d9cb39ac20ad6ba9fe8ba5a1a8452cca9"
+  },
+  "id": "qj0CHGrjHFLjKFjz",
+  "tags": []
+}

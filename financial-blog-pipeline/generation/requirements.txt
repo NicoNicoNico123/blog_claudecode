@@ -1,0 +1,15 @@
+python-dotenv>=1.0.1
+pydantic>=1.10.14
+click>=8.1.7
+psycopg2-binary>=2.9.9
+cloudinary>=1.41.0
+openai>=1.35.7
+requests>=2.32.3
+tqdm>=4.66.4
+tenacity>=8.5.0
+beautifulsoup4>=4.12.3
+tiktoken>=0.7.0
+langchain>=0.2.9
+langchain-openai>=0.1.20
+langgraph>=0.2.34
+langchain-mcp-adapters>=0.0.16
